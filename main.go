@@ -11,18 +11,6 @@ import (
 	"github.com/go-toast/toast"
 )
 
-// Constants
-// Location for API
-const pfLat = "37.9278"
-const pfLong = "23.7036"
-
-const korLat = "37.9011"
-const korLong = "23.8727"
-
-// Vars for toast notification
-const appID = "Rain Detector API"
-const title = "Rain Tomorrow!"
-const message = "Get your Jacket!"
 const iconPath = `C:\Users\giann\Downloads\cloud-rain-solid.svg`
 
 type WeatherResponse struct {
@@ -36,45 +24,67 @@ var locations = []struct {
 	Latitude  string
 	Longitude string
 	Name      string
+	CityID    string
 }{
-	{"37.9278", "23.7036", "Palaio Faliro"},
-	{"37.9011", "23.8727", "Koropi"},
+	{"37.9278", "23.7036", "Palaio Faliro", "2281820"},
+	{"37.9011", "23.8727", "Koropi", "4-182368_1_al"},
 }
 
 func main() {
+	for _, loc := range locations {
+		checkWeather(loc.Latitude, loc.Longitude, loc.Name, loc.CityID)
+	}
+}
 
-	pfUrl := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&daily=precipitation_sum&timezone=auto", pfLat, pfLong)
-	//korUrl := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&daily=precipitation_sum&timezone=auto", korLat, korLong)
+func checkWeather(latitude, longtitude, name, cityID string) {
+	url := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&daily=precipitation_sum&timezone=auto", latitude, longtitude)
+
+	moreInfoUrl := fmt.Sprintf("https://www.accuweather.com/en/gr/%s/%s/weather-forecast/%s", name, cityID, cityID)
 
 	actions := []toast.Action{
-		{Type: "protocol", Label: "More Info", Arguments: "https://www.example.com"},
+		{Type: "protocol", Label: "More Info", Arguments: moreInfoUrl},
 		{Type: "protocol", Label: "Close", Arguments: "close-app"},
 	}
 
-	resp, err := http.Get(pfUrl)
+	resp, err := http.Get(url)
 	if err != nil {
-		fmt.Println("Error getting weather data:", err)
+		fmt.Printf("Error fetching weather data for %s: %v\n", name, err)
 		return
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
-
-	var weatherResp WeatherResponse
-
-	err = json.Unmarshal(body, &weatherResp)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("Error parsing weather data:", err)
+		fmt.Printf("Error reading API response for %s: %v\n", name, err)
 		return
 	}
 
-	tomorrow := time.Now().Add(24 * time.Hour).Format("2006-01-02")
+	var weatherResp WeatherResponse
+	err = json.Unmarshal(body, &weatherResp)
+	if err != nil {
+		fmt.Printf("Error parsing weather data for %s: %v\n", name, err)
+		return
+	}
+
+	checkWeatherData(weatherResp, name)
+
+	var targetDate string
+
+	// If time is between midnight and noon
+	// Get todays weather
+	// Else get tomorrow's weather
+	// (It's just my personal preference)
+	if time.Now().Hour() > 00 && time.Now().Hour() < 14 {
+		targetDate = time.Now().Format("2006-01-02")
+	} else {
+		targetDate = time.Now().Add(24 * time.Hour).Format("2006-01-02")
+	}
 
 	for i, date := range weatherResp.Daily.Time {
-		if date == tomorrow {
+		if date == targetDate {
 			precipitation := weatherResp.Daily.PrecipitationSum[i]
 			if precipitation > 0 {
-				toastNotification(actions)
+				toastNotification(actions, name)
 				fmt.Println("Rain expected tomorrow.")
 				fmt.Println("Toast notification sent.")
 			} else {
@@ -85,11 +95,24 @@ func main() {
 	}
 }
 
-func toastNotification(actions []toast.Action) {
+func checkWeatherData(weatherResp WeatherResponse, name string) error {
+	if len(weatherResp.Daily.PrecipitationSum) == 0 || len(weatherResp.Daily.Time) == 0 {
+		return fmt.Errorf("no weather data available for %s", name)
+	}
+
+	if len(weatherResp.Daily.PrecipitationSum) != len(weatherResp.Daily.Time) {
+		return fmt.Errorf("mismatch in data length for %s between precipitation and time", name)
+	}
+
+	return nil
+}
+
+func toastNotification(actions []toast.Action, name string) {
+	title := fmt.Sprintf("Rain forecasted for %s", name)
 	notification := toast.Notification{
-		AppID:   appID,
+		AppID:   "Rain API",
 		Title:   title,
-		Message: message,
+		Message: "Get your jacket!",
 		Icon:    iconPath,
 		Actions: actions,
 	}
