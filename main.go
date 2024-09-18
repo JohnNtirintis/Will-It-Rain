@@ -24,22 +24,25 @@ var locations = []struct {
 	Latitude  string
 	Longitude string
 	Name      string
+	CityID    string
 }{
-	{"37.9278", "23.7036", "Palaio Faliro"},
-	{"37.9011", "23.8727", "Koropi"},
+	{"37.9278", "23.7036", "Palaio Faliro", "2281820"},
+	{"37.9011", "23.8727", "Koropi", "4-182368_1_al"},
 }
 
 func main() {
 	for _, loc := range locations {
-		checkWeather(loc.Latitude, loc.Longitude, loc.Name)
+		checkWeather(loc.Latitude, loc.Longitude, loc.Name, loc.CityID)
 	}
 }
 
-func checkWeather(latitude, longtitude, name string) {
+func checkWeather(latitude, longtitude, name, cityID string) {
 	url := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&daily=precipitation_sum&timezone=auto", latitude, longtitude)
 
+	moreInfoUrl := fmt.Sprintf("https://www.accuweather.com/en/gr/%s/%s/weather-forecast/%s", name, cityID, cityID)
+
 	actions := []toast.Action{
-		{Type: "protocol", Label: "More Info", Arguments: "https://www.example.com"},
+		{Type: "protocol", Label: "More Info", Arguments: moreInfoUrl},
 		{Type: "protocol", Label: "Close", Arguments: "close-app"},
 	}
 
@@ -65,10 +68,20 @@ func checkWeather(latitude, longtitude, name string) {
 
 	checkWeatherData(weatherResp, name)
 
-	tomorrow := time.Now().Add(24 * time.Hour).Format("2006-01-02")
+	var targetDate string
+
+	// If time is between midnight and noon
+	// Get todays weather
+	// Else get tomorrow's weather
+	// (It's just my personal preference)
+	if time.Now().Hour() > 00 && time.Now().Hour() < 14 {
+		targetDate = time.Now().Format("2006-01-02")
+	} else {
+		targetDate = time.Now().Add(24 * time.Hour).Format("2006-01-02")
+	}
 
 	for i, date := range weatherResp.Daily.Time {
-		if date == tomorrow {
+		if date == targetDate {
 			precipitation := weatherResp.Daily.PrecipitationSum[i]
 			if precipitation > 0 {
 				toastNotification(actions, name)
