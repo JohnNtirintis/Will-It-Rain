@@ -6,12 +6,20 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/go-toast/toast"
 )
 
 const iconPath = `C:\Users\giann\Downloads\cloud-rain-solid.svg`
+
+type Location struct {
+	Latitude  string `json:"latitude"`
+	Longitude string `json:"longitude"`
+	Name      string `json:"name"`
+	CityID    string `json:"cityID"`
+}
 
 type WeatherResponse struct {
 	Daily struct {
@@ -20,20 +28,35 @@ type WeatherResponse struct {
 	} `json:"daily"`
 }
 
-var locations = []struct {
-	Latitude  string
-	Longitude string
-	Name      string
-	CityID    string
-}{
-	{"37.9278", "23.7036", "Palaio Faliro", "2281820"},
-	{"37.9011", "23.8727", "Koropi", "4-182368_1_al"},
-}
-
 func main() {
+	locations, err := loadLocations("locations.json")
+	if err != nil {
+		log.Fatalf("Error loading locations: %v", err)
+	}
+
 	for _, loc := range locations {
 		checkWeather(loc.Latitude, loc.Longitude, loc.Name, loc.CityID)
 	}
+}
+
+func loadLocations(filename string) ([]Location, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("could not open locations file: %v", err)
+	}
+	defer file.Close()
+
+	bytes, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("could not read locations file: %v", err)
+	}
+
+	var locations []Location
+	if err := json.Unmarshal(bytes, &locations); err != nil {
+		return nil, fmt.Errorf("could not parse locations file: %v", err)
+	}
+
+	return locations, nil
 }
 
 func checkWeather(latitude, longtitude, name, cityID string) {
@@ -91,7 +114,6 @@ func checkWeather(latitude, longtitude, name, cityID string) {
 				toastNotification(actions, name)
 				fmt.Println(notificationMsg)
 				fmt.Println("Toast notification sent")
-				return
 			} else {
 				noRainMsg := "No rain expected today."
 				if timeNow.Hour() >= 14 {
@@ -99,7 +121,6 @@ func checkWeather(latitude, longtitude, name, cityID string) {
 				}
 
 				fmt.Println(noRainMsg)
-				return
 			}
 		}
 	}
