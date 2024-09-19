@@ -68,16 +68,20 @@ func checkWeather(latitude, longtitude, name, cityID string) {
 
 	checkWeatherData(weatherResp, name)
 
+	timeNow := time.Now()
 	var targetDate string
+	var notificationMsg string
 
 	// If time is between midnight and noon
 	// Get todays weather
 	// Else get tomorrow's weather
 	// (It's just my personal preference)
-	if time.Now().Hour() > 00 && time.Now().Hour() < 14 {
-		targetDate = time.Now().Format("2006-01-02")
+	if timeNow.Hour() > 00 && timeNow.Hour() < 14 {
+		targetDate = timeNow.Format("2006-01-02")
+		notificationMsg = "Rain expected today."
 	} else {
-		targetDate = time.Now().Add(24 * time.Hour).Format("2006-01-02")
+		targetDate = timeNow.Add(24 * time.Hour).Format("2006-01-02")
+		notificationMsg = "Rain expected tomorrow."
 	}
 
 	for i, date := range weatherResp.Daily.Time {
@@ -85,12 +89,18 @@ func checkWeather(latitude, longtitude, name, cityID string) {
 			precipitation := weatherResp.Daily.PrecipitationSum[i]
 			if precipitation > 0 {
 				toastNotification(actions, name)
-				fmt.Println("Rain expected tomorrow.")
-				fmt.Println("Toast notification sent.")
+				fmt.Println(notificationMsg)
+				fmt.Println("Toast notification sent")
+				return
 			} else {
-				fmt.Println("No rain expected tomorrow")
+				noRainMsg := "No rain expected today."
+				if timeNow.Hour() >= 14 {
+					noRainMsg = "No rain expected tomorrow."
+				}
+
+				fmt.Println(noRainMsg)
+				return
 			}
-			break
 		}
 	}
 }
