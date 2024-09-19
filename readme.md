@@ -1,4 +1,4 @@
-I drive a motorcycle for commuting and there have been way too many times where I didn't know it was gonna rain and i forgot my jacket or umbrella. This very small project aims to solve that. I personally have created a task using Task Scheduler on Windows that runs on startup and every 3 hours.
+I commute by motorcycle, and there have been far too many times when I didn't know (or even expected that) rain was forecasted. This small project is designed to help prevent that. Personally, I’ve set up a task in Windows Task Scheduler to run the program at startup and every three hours.
 
 # 🌧️ Will It Rain? - Weather Forecast Notification
 This Go project fetches weather data from the Open-Meteo API and sends a toast notification on Windows if rain is forecasted for specific locations. It’s designed to help you prepare for rainy weather by sending a quick desktop alert to get your jacket or umbrella!
@@ -34,5 +34,6 @@ This Go project fetches weather data from the Open-Meteo API and sends a toast n
 ``` go run main.go ```
 
 ### Alternatively, you can compile the program with:
-``` go build -o weather-notifier 
-./weather-notifier ```
+``` go build -o weather-notifier ```
+
+```./weather-notifier ```
