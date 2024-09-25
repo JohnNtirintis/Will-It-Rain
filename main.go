@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"time"
@@ -28,15 +31,77 @@ type WeatherResponse struct {
 	} `json:"daily"`
 }
 
+// TODO: Use goroutines?
 func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	locations, err := loadLocations("locations.json")
 	if err != nil {
 		log.Fatalf("Error loading locations: %v", err)
 	}
 
 	for _, loc := range locations {
-		checkWeather(loc.Latitude, loc.Longitude, loc.Name, loc.CityID)
+		checkWeather(ctx, loc.Latitude, loc.Longitude, loc.Name, loc.CityID)
 	}
+}
+
+func makeRequestWithRetry(ctx context.Context, url string, maxRetries int) ([]byte, error) {
+	var respBody []byte
+	var err error
+
+	delay := 1 * time.Second
+
+	for i := 0; i <= maxRetries; i++ {
+		select {
+		case <-ctx.Done():
+			// context is canceled, so return
+			return nil, ctx.Err()
+		default:
+			respBody, err = makeHttpRequest(url)
+			// is successful
+			if err == nil {
+				return respBody, nil
+			}
+
+			log.Printf("Attempt %d: Failed to fetch %s, error: %v", i+1, url, err)
+
+			if i == maxRetries {
+				return nil, fmt.Errorf("max retries reached for %s: %v", url, err)
+			}
+
+			// Exponential backoff with jitter
+			time.Sleep(delay + time.Duration(rand.IntN(1000))*time.Millisecond)
+
+			maxDelay := 10 * time.Second
+			if delay > maxDelay {
+				delay = maxDelay
+			} else {
+				delay *= 2
+			}
+
+		}
+	}
+	return nil, errors.New("unreachable code")
+}
+
+func makeHttpRequest(url string) ([]byte, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("error during HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading response body: %w", err)
+	}
+
+	return body, nil
 }
 
 func loadLocations(filename string) ([]Location, error) {
@@ -59,7 +124,7 @@ func loadLocations(filename string) ([]Location, error) {
 	return locations, nil
 }
 
-func checkWeather(latitude, longtitude, name, cityID string) {
+func checkWeather(ctx context.Context, latitude, longtitude, name, cityID string) {
 	url := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&daily=precipitation_sum&timezone=auto", latitude, longtitude)
 
 	moreInfoUrl := fmt.Sprintf("https://www.accuweather.com/en/gr/%s/%s/weather-forecast/%s", name, cityID, cityID)
@@ -69,21 +134,14 @@ func checkWeather(latitude, longtitude, name, cityID string) {
 		{Type: "protocol", Label: "Close", Arguments: "close-app"},
 	}
 
-	resp, err := http.Get(url)
+	respBody, err := makeRequestWithRetry(ctx, url, 2)
 	if err != nil {
 		fmt.Printf("Error fetching weather data for %s: %v\n", name, err)
 		return
 	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Printf("Error reading API response for %s: %v\n", name, err)
-		return
-	}
 
 	var weatherResp WeatherResponse
-	err = json.Unmarshal(body, &weatherResp)
+	err = json.Unmarshal(respBody, &weatherResp)
 	if err != nil {
 		fmt.Printf("Error parsing weather data for %s: %v\n", name, err)
 		return
