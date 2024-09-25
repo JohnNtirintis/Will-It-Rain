@@ -37,3 +37,6 @@ This Go project fetches weather data from the Open-Meteo API and sends a toast n
 ``` go build -o weather-notifier ```
 
 ```./weather-notifier ```
+
+### Disclaimer:
+The main purpose of this project -- apart from saving me from getting wet -- is to help me learn Go. This repo is my first time using Go, so mistakes are expected.
