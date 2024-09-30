@@ -28,6 +28,8 @@ type WeatherResponse struct {
 	Daily struct {
 		PrecipitationSum []float64 `json:"precipitation_sum"`
 		Time             []string  `json:"time"`
+		Temperature      []float64 `json:"temperature_2m_min"`
+		Snowfall         []float64 `json:"snowfall_sum"`
 	} `json:"daily"`
 }
 
@@ -42,7 +44,7 @@ func main() {
 	}
 
 	for _, loc := range locations {
-		checkWeather(ctx, loc.Latitude, loc.Longitude, loc.Name, loc.CityID)
+		checkWeatherData(ctx, loc.Latitude, loc.Longitude, loc.Name, loc.CityID)
 	}
 }
 
@@ -124,8 +126,9 @@ func loadLocations(filename string) ([]Location, error) {
 	return locations, nil
 }
 
-func checkWeather(ctx context.Context, latitude, longtitude, name, cityID string) {
-	url := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&daily=precipitation_sum&timezone=auto", latitude, longtitude)
+func checkWeatherData(ctx context.Context, latitude, longitude, name, cityID string) {
+	//url := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&daily=precipitation_sum&timezone=auto", latitude, longtitude)
+	url := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&daily=precipitation_sum,temperature_2m_min,snowfall_sum&timezone=auto", latitude, longitude)
 
 	moreInfoUrl := fmt.Sprintf("https://www.accuweather.com/en/gr/%s/%s/weather-forecast/%s", name, cityID, cityID)
 
@@ -147,29 +150,34 @@ func checkWeather(ctx context.Context, latitude, longtitude, name, cityID string
 		return
 	}
 
-	checkWeatherData(weatherResp, name)
+	validateWeatherData(weatherResp, name)
 
 	timeNow := time.Now()
-	var targetDate string
+	hourNow := timeNow.Hour()
+	targetDate := timeNow.Format("2006-01-02")
 	var notificationMsg string
+	var temperatureMessage string
 
 	// If time is between midnight and noon
 	// Get todays weather
 	// Else get tomorrow's weather
 	// (It's just my personal preference)
-	if timeNow.Hour() > 00 && timeNow.Hour() < 14 {
-		targetDate = timeNow.Format("2006-01-02")
+	if hourNow > 00 && hourNow < 14 {
+		temperatureMessage = checkColdTemperature(weatherResp.Daily.Temperature[1])
 		notificationMsg = "Rain expected today."
 	} else {
+		temperatureMessage = checkColdTemperature(weatherResp.Daily.Temperature[1])
 		targetDate = timeNow.Add(24 * time.Hour).Format("2006-01-02")
 		notificationMsg = "Rain expected tomorrow."
 	}
+
+	notificationMsg += temperatureMessage
 
 	for i, date := range weatherResp.Daily.Time {
 		if date == targetDate {
 			precipitation := weatherResp.Daily.PrecipitationSum[i]
 			if precipitation > 0 {
-				toastNotification(actions, name)
+				toastNotification(actions, name, notificationMsg)
 				fmt.Println(notificationMsg)
 				fmt.Println("Toast notification sent")
 			} else {
@@ -184,7 +192,27 @@ func checkWeather(ctx context.Context, latitude, longtitude, name, cityID string
 	}
 }
 
-func checkWeatherData(weatherResp WeatherResponse, name string) error {
+func checkColdTemperature(temperature float64) (message string) {
+	// TODO: Add warm weather checks in the feature
+	switch {
+	case temperature <= 25:
+		return "A bit chilly. <= 25"
+	case temperature <= 20:
+		return "It's going to be slightly cold. <= 20c"
+	case temperature <= 15:
+		return "It's going to be cold. <= 15c"
+	case temperature <= 10:
+		return "Very cold. <= 10c"
+	case temperature <= 5:
+		return "Warning! Freezing cold. <= 5c"
+	case temperature <= 0:
+		return "!Extreme cold waring! <= 0c"
+	default:
+		return "Fine weather tomorrow! > 25c"
+	}
+}
+
+func validateWeatherData(weatherResp WeatherResponse, name string) error {
 	if len(weatherResp.Daily.PrecipitationSum) == 0 || len(weatherResp.Daily.Time) == 0 {
 		return fmt.Errorf("no weather data available for %s", name)
 	}
@@ -196,12 +224,13 @@ func checkWeatherData(weatherResp WeatherResponse, name string) error {
 	return nil
 }
 
-func toastNotification(actions []toast.Action, name string) {
+func toastNotification(actions []toast.Action, name string, message string) {
 	title := fmt.Sprintf("Rain forecasted for %s", name)
+
 	notification := toast.Notification{
-		AppID:   "Rain API",
+		AppID:   "Will it Rain API",
 		Title:   title,
-		Message: "Get your jacket!",
+		Message: message,
 		Icon:    iconPath,
 		Actions: actions,
 	}
