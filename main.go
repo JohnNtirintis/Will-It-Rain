@@ -15,7 +15,16 @@ import (
 	"github.com/go-toast/toast"
 )
 
-const iconPath = `C:\Users\giann\Downloads\cloud-rain-solid.svg`
+const (
+	dayStartHour      = 0
+	dayEndHour        = 14
+	rainMsg           = "Rain Expected."
+	noRainTodayMsg    = "No rain expected today."
+	noRainTomorrowMsg = "No rain expected tomorrow."
+	iconPath          = `C:\Users\giann\Downloads\cloud-rain-solid.svg`
+)
+
+//const iconPath = `C:\Users\giann\Downloads\cloud-rain-solid.svg`
 
 type Location struct {
 	Latitude  string `json:"latitude"`
@@ -152,42 +161,35 @@ func checkWeatherData(ctx context.Context, latitude, longitude, name, cityID str
 
 	validateWeatherData(weatherResp, name)
 
+	handleNotification(weatherResp, actions, name)
+}
+
+func handleNotification(weatherResp WeatherResponse, actions []toast.Action, name string) {
 	timeNow := time.Now()
-	hourNow := timeNow.Hour()
-	targetDate := timeNow.Format("2006-01-02")
-	var notificationMsg string
-	var temperatureMessage string
 
-	// If time is between midnight and noon
-	// Get todays weather
-	// Else get tomorrow's weather
-	// (It's just my personal preference)
-	if hourNow > 00 && hourNow < 14 {
-		temperatureMessage = checkColdTemperature(weatherResp.Daily.Temperature[1])
-		notificationMsg = "Rain expected today."
-	} else {
-		temperatureMessage = checkColdTemperature(weatherResp.Daily.Temperature[1])
-		targetDate = timeNow.Add(24 * time.Hour).Format("2006-01-02")
-		notificationMsg = "Rain expected tomorrow."
-	}
+	day, targetDate, temperature := determineDayAndTemperature(weatherResp, timeNow)
 
-	notificationMsg += temperatureMessage
+	temperatureMessage := checkColdTemperature(temperature)
 
-	for i, date := range weatherResp.Daily.Time {
-		if date == targetDate {
-			precipitation := weatherResp.Daily.PrecipitationSum[i]
-			if precipitation > 0 {
+	for i, data := range weatherResp.Daily.Time {
+		if data == targetDate {
+			rainExpected := weatherResp.Daily.PrecipitationSum[i] > 0
+
+			notificationMsg := generateNotificationMessage(day, rainExpected, temperatureMessage)
+
+			if notificationMsg != "" {
 				toastNotification(actions, name, notificationMsg)
 				fmt.Println(notificationMsg)
 				fmt.Println("Toast notification sent")
 			} else {
-				noRainMsg := "No rain expected today."
-				if timeNow.Hour() >= 14 {
-					noRainMsg = "No rain expected tomorrow."
+				// Display no rain message if no precipitation and no temperature message
+				if timeNow.Hour() >= dayEndHour {
+					fmt.Println(noRainTomorrowMsg)
+				} else {
+					fmt.Println(noRainTodayMsg)
 				}
-
-				fmt.Println(noRainMsg)
 			}
+			break
 		}
 	}
 }
@@ -224,6 +226,26 @@ func validateWeatherData(weatherResp WeatherResponse, name string) error {
 	return nil
 }
 
+func determineDayAndTemperature(weatherResp WeatherResponse, timeNow time.Time) (string, string, float64) {
+	hourNow := timeNow.Hour()
+
+	var day string
+	var targetDate string
+	var temperature float64
+
+	if hourNow >= dayStartHour && hourNow < dayEndHour {
+		day = "Today: "
+		targetDate = timeNow.Format("2006-01-02")
+		temperature = weatherResp.Daily.Temperature[0]
+	} else {
+		day = "Tomorrow: "
+		targetDate = timeNow.Add(24 * time.Hour).Format("2006-01-02")
+		temperature = weatherResp.Daily.Temperature[1]
+	}
+
+	return day, targetDate, temperature
+}
+
 func toastNotification(actions []toast.Action, name string, message string) {
 	title := fmt.Sprintf("Rain forecasted for %s", name)
 
@@ -240,4 +262,15 @@ func toastNotification(actions []toast.Action, name string, message string) {
 		log.Printf("**********")
 		log.Fatalln(err)
 	}
+}
+
+func generateNotificationMessage(day string, rain bool, temperatureMessage string) string {
+	if rain && temperatureMessage != "" {
+		return fmt.Sprintf("%s%s%s", day, rainMsg, temperatureMessage)
+	} else if rain {
+		return fmt.Sprintf("%s%s", day, rainMsg)
+	} else if temperatureMessage != "" {
+		return fmt.Sprintf("%s%s", day, temperatureMessage)
+	}
+	return ""
 }
