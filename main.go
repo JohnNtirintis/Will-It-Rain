@@ -10,6 +10,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/go-toast/toast"
@@ -21,10 +22,11 @@ const (
 	rainMsg           = "Rain Expected."
 	noRainTodayMsg    = "No rain expected today."
 	noRainTomorrowMsg = "No rain expected tomorrow."
-	iconPath          = `C:\Users\giann\Downloads\cloud-rain-solid.svg`
+	rainIconpath      = `cloud-rain-solid.svg`
+	sunIconPath       = `sun-solid.svg`
+	snowIconPath      = `snowflake-solid.svg`
+	coldIconPath      = `cold.svg`
 )
-
-//const iconPath = `C:\Users\giann\Downloads\cloud-rain-solid.svg`
 
 type Location struct {
 	Latitude  string `json:"latitude"`
@@ -42,8 +44,19 @@ type WeatherResponse struct {
 	} `json:"daily"`
 }
 
+type WeatherIconAndMessage struct {
+	WeatherMessage string
+	IconPath       string
+}
+
 // TODO: Use goroutines?
 func main() {
+
+	wd, err2 := os.Getwd()
+	if err2 != nil {
+		fmt.Println(err2)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -53,7 +66,7 @@ func main() {
 	}
 
 	for _, loc := range locations {
-		checkWeatherData(ctx, loc.Latitude, loc.Longitude, loc.Name, loc.CityID)
+		checkWeatherData(ctx, loc.Latitude, loc.Longitude, loc.Name, loc.CityID, wd)
 	}
 }
 
@@ -135,7 +148,7 @@ func loadLocations(filename string) ([]Location, error) {
 	return locations, nil
 }
 
-func checkWeatherData(ctx context.Context, latitude, longitude, name, cityID string) {
+func checkWeatherData(ctx context.Context, latitude, longitude, name, cityID string, wd string) {
 	//url := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&daily=precipitation_sum&timezone=auto", latitude, longtitude)
 	url := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&daily=precipitation_sum,temperature_2m_min,snowfall_sum&timezone=auto", latitude, longitude)
 
@@ -161,24 +174,31 @@ func checkWeatherData(ctx context.Context, latitude, longitude, name, cityID str
 
 	validateWeatherData(weatherResp, name)
 
-	handleNotification(weatherResp, actions, name)
+	handleNotification(weatherResp, actions, name, wd)
 }
 
-func handleNotification(weatherResp WeatherResponse, actions []toast.Action, name string) {
+func handleNotification(weatherResp WeatherResponse, actions []toast.Action, name string, wd string) {
 	timeNow := time.Now()
 
 	day, targetDate, temperature := determineDayAndTemperature(weatherResp, timeNow)
 
-	temperatureMessage := checkColdTemperature(temperature)
+	temperatureStruct := checkColdTemperature(temperature, wd)
 
 	for i, data := range weatherResp.Daily.Time {
 		if data == targetDate {
 			rainExpected := weatherResp.Daily.PrecipitationSum[i] > 0
 
-			notificationMsg := generateNotificationMessage(day, rainExpected, temperatureMessage)
+			// If rain is expected, overwrite any icons
+			// I care more about the rain than the temperature
+			// Also there is info about the temp in the notification message
+			if rainExpected {
+				temperatureStruct.IconPath = filepath.Join(wd, rainIconpath)
+			}
+
+			notificationMsg := generateNotificationMessage(day, rainExpected, temperatureStruct.WeatherMessage)
 
 			if notificationMsg != "" {
-				toastNotification(actions, name, notificationMsg)
+				toastNotification(actions, name, notificationMsg, temperatureStruct.IconPath)
 				fmt.Println(notificationMsg)
 				fmt.Println("Toast notification sent")
 			} else {
@@ -191,26 +211,6 @@ func handleNotification(weatherResp WeatherResponse, actions []toast.Action, nam
 			}
 			break
 		}
-	}
-}
-
-func checkColdTemperature(temperature float64) (message string) {
-	// TODO: Add warm weather checks in the feature
-	switch {
-	case temperature <= 25:
-		return "A bit chilly. <= 25"
-	case temperature <= 20:
-		return "It's going to be slightly cold. <= 20c"
-	case temperature <= 15:
-		return "It's going to be cold. <= 15c"
-	case temperature <= 10:
-		return "Very cold. <= 10c"
-	case temperature <= 5:
-		return "Warning! Freezing cold. <= 5c"
-	case temperature <= 0:
-		return "!Extreme cold waring! <= 0c"
-	default:
-		return "Fine weather tomorrow! > 25c"
 	}
 }
 
@@ -246,8 +246,8 @@ func determineDayAndTemperature(weatherResp WeatherResponse, timeNow time.Time) 
 	return day, targetDate, temperature
 }
 
-func toastNotification(actions []toast.Action, name string, message string) {
-	title := fmt.Sprintf("Rain forecasted for %s", name)
+func toastNotification(actions []toast.Action, name string, message string, iconPath string) {
+	title := fmt.Sprintf("Weather for %s", name)
 
 	notification := toast.Notification{
 		AppID:   "Will it Rain API",
@@ -256,6 +256,7 @@ func toastNotification(actions []toast.Action, name string, message string) {
 		Icon:    iconPath,
 		Actions: actions,
 	}
+
 	err := notification.Push()
 	if err != nil {
 		log.Println("Error", err)
@@ -273,4 +274,45 @@ func generateNotificationMessage(day string, rain bool, temperatureMessage strin
 		return fmt.Sprintf("%s%s", day, temperatureMessage)
 	}
 	return ""
+}
+
+func checkColdTemperature(temperature float64, wd string) WeatherIconAndMessage {
+	// TODO: Add warm weather checks in the feature
+	switch {
+	case temperature <= 0:
+		return WeatherIconAndMessage{
+			WeatherMessage: "!Extreme cold warning! <= 0c",
+			IconPath:       filepath.Join(wd, snowIconPath),
+		}
+	case temperature <= 5:
+		return WeatherIconAndMessage{
+			WeatherMessage: "Warning! Freezing cold. <= 5c",
+			IconPath:       filepath.Join(wd, snowIconPath),
+		}
+	case temperature <= 10:
+		return WeatherIconAndMessage{
+			WeatherMessage: "Very cold. <= 10c",
+			IconPath:       filepath.Join(wd, coldIconPath),
+		}
+	case temperature <= 15:
+		return WeatherIconAndMessage{
+			WeatherMessage: "It's going to be cold. <= 15c",
+			IconPath:       filepath.Join(wd, coldIconPath),
+		}
+	case temperature <= 20:
+		return WeatherIconAndMessage{
+			WeatherMessage: "It's going to be slightly cold. <= 20c",
+			IconPath:       filepath.Join(wd, coldIconPath),
+		}
+	case temperature <= 25:
+		return WeatherIconAndMessage{
+			WeatherMessage: "A bit chilly. <= 25c",
+			IconPath:       filepath.Join(wd, sunIconPath),
+		}
+	default:
+		return WeatherIconAndMessage{
+			WeatherMessage: "Fine weather tomorrow! > 25c",
+			IconPath:       filepath.Join(wd, sunIconPath),
+		}
+	}
 }
