@@ -1,11 +1,8 @@
 package main
 
-// TODO: This is a test1
+// TODO: This is a test 1
 
-// TODO: This is a test2
-// labels: todo
-
-// TODO(!todo): This is a test3
+// TODO(!todo): This is a test 3
 
 import (
 	"context"
@@ -22,6 +19,9 @@ import (
 
 	"github.com/go-toast/toast"
 )
+
+// TODO: This is a test 4
+// labels: todo
 
 const (
 	dayStartHour      = 0
