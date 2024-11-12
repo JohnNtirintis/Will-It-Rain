@@ -1,5 +1,12 @@
 package main
 
+// TODO: This is a test1
+
+// TODO: This is a test2
+// labels: todo
+
+// TODO(!todo): This is a test3
+
 import (
 	"context"
 	"encoding/json"
