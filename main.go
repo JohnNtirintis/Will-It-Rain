@@ -49,7 +49,7 @@ type WeatherIconAndMessage struct {
 	IconPath       string
 }
 
-// TODO: Use goroutines?
+// TODO(!todo): Use goroutines??
 func main() {
 
 	wd, err2 := os.Getwd()
