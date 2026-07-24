@@ -1,11 +1,5 @@
 package main
 
-// TODO: This is a test 1
-// Issue URL: https://github.com/JohnNtirintis/Will-It-Rain/issues/2
-
-
-// TODO(!todo): This is a test 3
-
 import (
 	"context"
 	"encoding/json"
@@ -22,10 +16,6 @@ import (
 
 	"github.com/go-toast/toast"
 )
-)
-
-// TODO: This is a test 4
-// labels: todo
 
 const (
 	dayStartHour      = 0
