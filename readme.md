@@ -9,17 +9,18 @@ This Go project fetches weather data from the Open-Meteo API and sends a toast n
 2. Install Go on your machine.
 3. Run the following command to get the dependencies:
 ``` go get github.com/go-toast/toast ```
-4. Modify the `locations.json` file to set your preferred locations.
+4. Modify the `locations_example.json` file to set your preferred locations.
+5. Rename the file to `locations.json` and place it in the same directory as the `main.go` file.
 
 ### Example `locations.json`:
 
 ```json
 [
- {
-     "latitude": "37.9278",
-     "longitude": "23.7036",
-     "name": "Palaio Faliro",
-     "cityID": "2281820"
+  {
+     "latitude": "37.9838",
+     "longitude": "23.7275",
+     "name": "Athens",
+     "cityID": "4-182664_1_al"
  },
  {
      "latitude": "37.9011",
