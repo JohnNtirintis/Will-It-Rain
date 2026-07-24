@@ -39,5 +39,9 @@ This Go project fetches weather data from the Open-Meteo API and sends a toast n
 
 ```./weather-notifier ```
 
+### Workflows:
+- run-tests.yml: will run on every push to main. Was configured based on this documentation: https://docs.github.com/en/actions/tutorials/build-and-test-code/go
+- todo-to-issue.yml: will run on every commit to main. It will check for any TODO comments in the code and create an issue for each one.
+
 ### Disclaimer:
 The main purpose of this project -- apart from saving me from getting wet -- is to help me learn Go. This repo is my first time using Go, so mistakes are expected.
