@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/go-toast/toast"
@@ -49,7 +50,6 @@ type WeatherIconAndMessage struct {
 	IconPath       string
 }
 
-// TODO: Use goroutines?
 func main() {
 
 	wd, err2 := os.Getwd()
@@ -65,9 +65,15 @@ func main() {
 		log.Fatalf("Error loading locations: %v", err)
 	}
 
+	var wg sync.WaitGroup
 	for _, loc := range locations {
-		checkWeatherData(ctx, loc.Latitude, loc.Longitude, loc.Name, loc.CityID, wd)
+		wg.Add(1)
+		go func(loc Location) {
+			defer wg.Done()
+			checkWeatherData(ctx, loc.Latitude, loc.Longitude, loc.Name, loc.CityID, wd)
+		}(loc)
 	}
+	wg.Wait()
 }
 
 func makeRequestWithRetry(ctx context.Context, url string, maxRetries int) ([]byte, error) {
@@ -82,7 +88,7 @@ func makeRequestWithRetry(ctx context.Context, url string, maxRetries int) ([]by
 			// context is canceled, so return
 			return nil, ctx.Err()
 		default:
-			respBody, err = makeHttpRequest(url)
+			respBody, err = makeHttpRequest(ctx, url)
 			// is successful
 			if err == nil {
 				return respBody, nil
@@ -109,12 +115,21 @@ func makeRequestWithRetry(ctx context.Context, url string, maxRetries int) ([]by
 	return nil, errors.New("unreachable code")
 }
 
-func makeHttpRequest(url string) ([]byte, error) {
-	resp, err := http.Get(url)
+func makeHttpRequest(ctx context.Context, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error creating HTTP request: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error during HTTP request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func(body io.ReadCloser) {
+		err := body.Close()
+		if err != nil {
+		}
+	}(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
@@ -133,7 +148,12 @@ func loadLocations(filename string) ([]Location, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not open locations file: %v", err)
 	}
-	defer file.Close()
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+
+		}
+	}(file)
 
 	bytes, err := io.ReadAll(file)
 	if err != nil {
@@ -149,7 +169,6 @@ func loadLocations(filename string) ([]Location, error) {
 }
 
 func checkWeatherData(ctx context.Context, latitude, longitude, name, cityID string, wd string) {
-	//url := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&daily=precipitation_sum&timezone=auto", latitude, longtitude)
 	url := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&daily=precipitation_sum,temperature_2m_min,snowfall_sum&timezone=auto", latitude, longitude)
 
 	moreInfoUrl := fmt.Sprintf("https://www.accuweather.com/en/gr/%s/%s/weather-forecast/%s", name, cityID, cityID)
@@ -172,7 +191,10 @@ func checkWeatherData(ctx context.Context, latitude, longitude, name, cityID str
 		return
 	}
 
-	validateWeatherData(weatherResp, name)
+	if err := validateWeatherData(weatherResp, name); err != nil {
+		fmt.Printf("Error validating weather data for %s: %v\n", name, err)
+		return
+	}
 
 	handleNotification(weatherResp, actions, name, wd)
 }
@@ -217,6 +239,10 @@ func handleNotification(weatherResp WeatherResponse, actions []toast.Action, nam
 func validateWeatherData(weatherResp WeatherResponse, name string) error {
 	if len(weatherResp.Daily.PrecipitationSum) == 0 || len(weatherResp.Daily.Time) == 0 {
 		return fmt.Errorf("no weather data available for %s", name)
+	}
+
+	if len(weatherResp.Daily.Temperature) < 2 {
+		return fmt.Errorf("not enough temperature data for %s to cover today and tomorrow", name)
 	}
 
 	if len(weatherResp.Daily.PrecipitationSum) != len(weatherResp.Daily.Time) {
